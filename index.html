@@ -28,7 +28,7 @@ label{display:block;font-weight:700;font-size:14px;margin:16px 0 5px}
 input{width:100%;font:inherit;font-size:18px;padding:8px 2px;border:0;border-bottom:2px solid var(--ln);background:transparent;color:var(--fg);border-radius:0;outline:0}
 input:focus{border-color:var(--rd)}
 .seg{display:flex}.seg button{flex:1;border:2px solid var(--ln);margin-left:-2px;background:transparent;color:var(--fg);font:inherit;padding:8px;cursor:pointer}
-.seg button.on{background:var(--fg);color:var(--bg)}
+.seg button.on{background:var(--fg);color:var(--bg)}.seg button:disabled{cursor:default;opacity:.55}
 .row{display:flex;width:100%;gap:10px;text-align:left;border:0;border-bottom:1px dashed var(--ln);background:transparent;color:var(--fg);font:inherit;padding:10px 4px;cursor:pointer}
 .row.on{background:var(--cd);box-shadow:inset 4px 0 0 var(--rd)}.row small{opacity:.85;margin-left:auto}.row:disabled{cursor:default}
 .tag{font-size:11px;font-weight:700;border:1.5px solid var(--rd);color:var(--rd);padding:0 6px;white-space:nowrap}.tag.cb{background:var(--rd);color:var(--bg)}
@@ -457,8 +457,42 @@ let cs=0,bc=0,R=1,g=1,N=4,me=0,name="",st,ch,cu,nm,step=0,cl,order,notes,fl,vote
 const rep=x=>esc(x).replace(/\{(\d)\}/g,(_,i)=>+i===me?'<i class="me">'+esc(nm[i])+"</i>":esc(nm[i]));
 const toast=m=>{const t=$("#t");t.textContent=m;t.classList.add("on");clearTimeout(tto);tto=setTimeout(()=>t.classList.remove("on"),2400)};
 function sh(a,s){a=[...a];let x=s*9301+49297;for(let i=a.length-1;i>0;i--){x=(x*9301+49297)%233280;const j=x%(i+1);[a[i],a[j]]=[a[j],a[i]]}return a}
-const KEY="school-mystery-v13";
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({g,N,R,cs,bc,me,name,step,notes,fl:[...fl],voted,voted2,gv,gv2,abU,act,nt,memo}))}catch(e){}};
+const KEY="school-mystery-v14";
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({g,N,R,cs,bc,me,name,step,notes,fl:[...fl],voted,voted2,gv,gv2,abU,act,nt,memo,room:RM?RM.code:null}))}catch(e){}};
+// ── 온라인 방: MP는 아래 Firebase 모듈이 연결되면 생긴다. 연결이 없으면 RM은 null이고 지금처럼 혼자 진행한다 ──
+// RM: 들어가 있는 방 {code, host(내가 방장인지), step, rd(판 묶음 번호), cfg, votes(이번 rd), players}
+let MPS="wait",MPM="",MPQ=null,RM=null,rcv="",scr="lobby";
+const follower=()=>!!RM&&!RM.host;
+const cfgDiff=()=>{const c=RM.cfg;return c.g!==g||c.N!==N||c.R!==R||(c.cs|0)!==cs||(c.bc|0)!==bc};
+// 모둠원은 방장 설정을 따르고, 방장은 바꾼 설정을 방에 쓴다
+const mpSync=()=>{if(!RM||!RM.cfg.N)return;if(!RM.host){const c=RM.cfg;g=c.g;N=c.N;R=c.R;cs=c.cs|0;bc=c.bc|0}else if(cfgDiff())MP.set(RM.code,{cfg:{g,N,R,cs,bc}}).catch(()=>{})};
+const taken=i=>{if(!RM)return"";const p=Object.entries(RM.players).find(([u,x])=>u!==MP.uid&&x&&x.me===i);return p?p[1].name||"?":""};
+const mpMe=()=>{if(RM)MP.me(RM.code,me,name).catch(()=>{})};
+const mpStep=()=>{if(RM&&RM.host)MP.set(RM.code,{step}).catch(()=>{})};
+// 투표는 내 것만 한 번 저장된다 (규칙이 덮어쓰기를 막는다). 이미 있으면 저장된 표를 따른다
+const mpVote=()=>{if(RM)MP.vote(RM.code,RM.rd,{v:voted,v2:voted2}).catch(()=>{const m=RM&&RM.votes[MP.uid];if(m){voted=m.v;voted2=m.v2;render()}toast("이 판의 투표는 이미 저장돼 있어요.")})};
+const mpLeave=()=>{if(window.MP)MP.leave();RM=null;save()};
+const rcode=()=>Array.from({length:5},()=>"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.random()*32|0]).join("");
+async function mpJoin(code,mk){if(RM&&RM.code===code)return;if(MPS==="wait"){MPQ=code;return}if(MPS!=="on")return toast("온라인 방에 연결할 수 없어요. 혼자 진행해요.");
+ try{mk?await MP.create(code,{g,N,R,cs,bc}):await MP.join(code)}catch(e){toast(e.message||"방에 들어가지 못했어요.")}}
+function mpState(s,m){MPS=s;MPM=m||"";if(s==="on"&&MPQ){const q=MPQ;MPQ=null;mpJoin(q)}if(scr==="lobby"&&$("#rm")){$("#rm").innerHTML=roomBox();bindRoom()}}
+function mpRoom(code,v){const p=RM;RM={code,host:v.host===MP.uid,step:v.step|0,rd:v.rd|0,cfg:v.cfg||{},votes:(v.votes||{})[v.rd]||{},players:v.players||{}};
+ if(scr==="lobby"){const f=document.activeElement&&document.activeElement.id;lobby();if(f&&$("#"+f))$("#"+f).focus();return}
+ if(scr!=="game")return;
+ // 방장이 ‘다음 판’을 누르면 모둠원도 로비로 돌아가 같은 설정으로 다시 입장한다
+ if(!RM.host&&p&&p.rd!==RM.rd){clearSave();return lobby()}
+ if(!RM.host&&RM.step!==step){step=RM.step;sec=TLm();clearInterval(tm);run=false;render();return}
+ if(step===5){const y=scrollY;render();scrollTo(0,y)}}
+const roomBox=()=>MPS==="wait"?`<div class="note">온라인 방 연결 중…</div>`:MPS==="off"?`<div class="note">온라인 방을 쓸 수 없어요${MPM?" ("+esc(MPM)+")":""}. 지금처럼 기기마다 혼자 진행하면 돼요.</div>`:RM?`<div class="note"><b>방 ${RM.code}</b> · ${RM.host?"방장":"모둠원"} · ${Object.keys(RM.players).length}명 입장<br><small>${RM.host?"모둠 번호·인원·사건·판 번호를 바꾸면 모둠원 기기도 함께 바뀌어요. 게임 단계는 방장이 넘겨요.":"모둠 번호·인원·사건·판 번호는 방장 설정을 따라요. 게임 단계도 방장이 넘겨요."}</small><div class="two"><button class="btn sub" id="rmx">방 나가기</button></div></div>`:`<label for="rc">함께 하기 <span class="hint">(방 코드: 영문 대문자·숫자 4~6자리)</span></label><input id="rc" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="비워 두고 만들면 자동으로 정해져요" value="${esc(rcv)}"><div class="two"><button class="btn sub" id="rmc">방 만들기</button><button class="btn sub" id="rmj">방 입장</button></div>`;
+const bindRoom=()=>{const i=$("#rc"),ok=c=>/^[A-Z0-9]{4,6}$/.test(c)||(toast("방 코드는 영문 대문자·숫자 4~6자리예요."),false);
+ if(i)i.oninput=()=>{i.value=rcv=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"")};
+ if($("#rmc"))$("#rmc").onclick=()=>{const c=rcv||rcode();if(ok(c))mpJoin(c,1)};
+ if($("#rmj"))$("#rmj").onclick=()=>{if(ok(rcv))mpJoin(rcv)};
+ if($("#rmx"))$("#rmx").onclick=()=>{mpLeave();lobby()}};
+// 방 투표 집계 [[인물 번호, 표 수], …] 많은 순
+const cnt=k=>{const t={};Object.values(RM.votes).forEach(x=>{if(x&&x[k]!=null)t[x[k]]=(t[x[k]]||0)+1});return Object.entries(t).sort((a,b)=>b[1]-a[1])};
+const tally=()=>{if(!RM)return"";const L=k=>cnt(k).map(([i,n])=>esc(nm[i])+" "+n+"표").join(", ")||"아직 없어요";return`<div class="note"><b>방 투표 집계</b> · ${Object.keys(RM.votes).length}/${N}명 투표<br>범인: ${L("v")}<br>${st.m?"공범":"거짓말한 사람"}: ${L("v2")}<br><small>모두 투표하면 가장 많이 받은 사람이 미리 골라져요. 동점이면 직접 정하세요.</small></div>`};
+const autoSel=()=>{if(!RM||Object.keys(RM.votes).length<N)return;const top=k=>{const s=cnt(k);return s.length&&(s.length<2||s[0][1]>s[1][1])?+s[0][0]:null};if(sel===null)sel=top("v");if(st.m&&sel2===null)sel2=top("v2")};
 const load=()=>{try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}};
 const clearSave=()=>{try{localStorage.removeItem(KEY)}catch(e){}};
 const MS=["",""," · 의심"," · 무관"];
@@ -491,7 +525,7 @@ let AC=null;
 const SN={flip:[[520,.05,"triangle"]],clue:[[660,.08],[990,.14]],stamp:[[140,.22,"square"],[90,.18,"square"]],end:[[880,.18],[0,.1],[880,.18],[0,.1],[1175,.32]],ab:[[784,.07],[1175,.12]]};
 const snd=t=>{if(!PR.s)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();let at=AC.currentTime;for(const[f,d,ty]of SN[t]){if(f){const o=AC.createOscillator(),v=AC.createGain();o.type=ty||"sine";o.frequency.value=f;v.gain.setValueAtTime(.07,at);v.gain.exponentialRampToValueAtTime(.001,at+d);o.connect(v).connect(AC.destination);o.start(at);o.stop(at+d)}at+=d}}catch(e){}};
 // 진행 안내: 선생님이 처음 진행할 때 읽는 한 페이지
-function guide(){clearInterval(tm);run=false;const d=D(),sec2=x=>`<h2>${x}</h2>`;
+function guide(){scr="guide";clearInterval(tm);run=false;const d=D(),sec2=x=>`<h2>${x}</h2>`;
  app.innerHTML=hd("GUIDE","진행 안내",`<p class="s">처음 진행하는 선생님을 위한 한 페이지 안내예요. 전체 약 40~50분 걸려요.</p>`)+`${sec2("준비")}<ul class="gd"><li>모둠은 3~10명 (7명부터는 다인원 전용 사건). 한 사람당 기기 하나가 필요해요. 기기가 부족하면 <b>선생님 화면 → 인쇄용 카드</b>로 종이 진행을 할 수 있어요.</li><li>같은 모둠은 <b>모둠 번호 · 인원 · 사건 · 판 번호</b>를 모두 똑같이 골라야 해요. 하나라도 다르면 범인이 달라져요.</li><li>모둠원끼리 <b>서로 다른 인물</b>을 고르게 하세요. 시작 화면 맨 위에 내 역할이 크게 나오니 소리 내어 확인하게 하세요.</li></ul>
  ${sec2("진행 순서")}<table class="gt"><tr><th>단계</th><th>시간</th><th>할 일</th></tr><tr><td>시작</td><td>5~7분</td><td>카드 6장을 모두 열어 읽어요. 개인 카드는 남에게 보여 주지 않아요.</td></tr><tr><td>1차 조사</td><td>5분</td><td>장소를 골라 단서를 얻어요 (${N}인 기준 ${d[0]}장). 혐의를 풀어 주는 단서는 아직 안 나와요.</td></tr><tr><td>1차 토론</td><td>3분</td><td>자기소개 후 행적을 이야기해요. 속보 카드를 함께 열어요.</td></tr><tr><td>2차 조사</td><td>5분</td><td>‘심층 단서’가 새로 나와요 (${N}인 기준 ${d[1]}장).</td></tr><tr><td>최종 토론</td><td>3분</td><td>반전 속보를 열고, 말이 어긋나는 사람을 따져요.</td></tr><tr><td>투표·엔딩</td><td>7~10분</td><td>① 혼자 고르기 → ② ‘셋, 둘, 하나!’ 손가락 동시 지목 → 진상 카드 공개.</td></tr></table>
  ${sec2("7~10명일 때")}<ul class="gd"><li>인원을 7~10명으로 고르면 다인원 전용 사건으로 진행돼요: ${BIGS.map(b=>"‘"+b.t+"’").join(", ")}.</li><li>범인이 물건을 꺼내고(1차 사건), 단짝인 <b>공범</b>이 다른 곳으로 옮겨요(2차 사건). 모둠 투표에서 두 명을 모두 찾아야 ‘사건 해결’이에요.</li><li>범인과 공범이 아닌 사람은 모두 <b>‘내가 아는 단서’</b>를 하나씩 갖고 있어요. 구경만 하는 역할은 없어요.</li><li>범인 찾기가 목표가 아닌 <b>독자 목표 역할</b>이 있어요: 신문 기자·단서 수집가(7명부터), 라이벌 탐정(8명부터), 단짝 수호자(9명부터), 평화주의자(10명).</li><li>인물 순서대로 <b>A팀·B팀</b>으로 나뉘어요. 1차 조사는 자기 팀 장소, <b>2차 조사는 팀을 바꿔 상대 팀 장소</b>를 조사해요. 1차 사건 단서는 A팀 쪽, 2차 사건 단서는 B팀 쪽에 있어서 토론 때 꼭 단서를 나눠야 해요.</li><li><b>행동 단계:</b> 2차 조사를 시작하기 전에 모두 비밀 행동을 하나씩 해요. 미행, 잠복, 엿듣기 중에서 고르고, 범인 쪽은 가짜 소문, 기자는 특종 취재도 할 수 있어요. 결과는 자기 기기에만 나와요.</li><li>토론 타이머는 5분이에요. 다른 팀 장소를 조사하거나 다른 팀에게 단서를 요청하는 팀 능력이 있어요.</li></ul>
@@ -500,35 +534,38 @@ function guide(){clearInterval(tm);run=false;const d=D(),sec2=x=>`<h2>${x}</h2>`
  <button class="btn go sub" id="gb">로비로</button>${prefBar()}`;
  $("#gb").onclick=lobby;window.scrollTo(0,0)}
 function lobby(){
- setup();clearInterval(tm);run=false;const sv=load();
+ scr="lobby";mpSync();setup();clearInterval(tm);run=false;const sv=load();
  app.innerHTML=hd(`CASE FILE · ${String(g).padStart(2,"0")}모둠 · ${R}판`,"교실 사건 파일",`${HERO}<p class="s">다치는 사람은 없어요. 사라진 것을 누가, 왜 가져갔는지 추리하세요. 진행 시간은 약 40~50분이에요.</p>`)+`${sv&&sv.name?`<div class="note"><b>${esc(sv.name)}</b>님이 하던 게임이 있어요 (${sv.g}모둠 · ${sv.R||1}판 · ${esc(caseOf(sv.N,sv.cs,sv.bc,sv.g).t)} · ${ST[sv.step||0]}).<div class="two"><button class="btn" id="rs0">이어하기</button><button class="btn sub" id="rs1">새로 시작</button></div></div>`:""}
+ <div id="rm">${roomBox()}</div>
  <label>내 이름</label><input id="n" maxlength="8" placeholder="이름을 입력하세요" value="${esc(name)}">
  <label>모둠 번호</label><div class="seg" style="flex-wrap:wrap">${[1,2,3,4,5,6,7,8,9,10].map(i=>`<button data-g="${i}" class="${i===g?"on":""}">${i}</button>`).join("")}</div>
  <label>모둠 인원</label><div class="seg">${[3,4,5,6,7,8,9,10].map(i=>`<button data-n="${i}" class="${i===N?"on":""}">${i}</button>`).join("")}</div>
  <label for="cs">사건 <span class="hint">(모둠원 모두 같게 고르세요)</span></label>${caseSel()}${N>=7?`<p class="s" style="margin:6px 0 0">7~10명은 다인원 전용 사건이에요. 범인과 공범 두 명을 찾고, A팀·B팀으로 나눠 조사해요.</p>`:""}
  <label>판 번호 <span class="hint">(모둠원 모두 같은 번호를 고르세요. 판이 바뀌면 범인도 바뀌어요)</span></label><div class="seg">${[1,2,3,4,5,6,7,8,9].map(i=>`<button data-r="${i}" class="${i===R?"on":""}">${i}</button>`).join("")}</div>
  <label>내가 맡을 인물 <span class="hint">(모둠원끼리 서로 다른 인물을 고르세요)</span></label>
- ${ch.map((c,i)=>`<button class="row ${i===me?"on":""}" data-c="${i}"><span class="av" id="a${i}" style="--h:${HU[i]}"></span><b id="p${i}"></b><small>${c[1]}</small></button>`).join("")}
+ ${ch.map((c,i)=>`<button class="row ${i===me?"on":""}" data-c="${i}"><span class="av" id="a${i}" style="--h:${HU[i]}"></span><b id="p${i}"></b>${taken(i)?`<span class="tag">${esc(taken(i))} 사용 중</span>`:""}<small>${c[1]}</small></button>`).join("")}
  <div class="warn" id="nw" hidden></div>
  <button class="btn go" id="go">사건 현장으로 입장</button><div class="two"><button class="btn sub" id="gd">진행 안내</button><button class="btn sub" id="tch">선생님 화면</button></div>${prefBar()}`;
  $("#tch").onclick=()=>teacher(0);$("#gd").onclick=guide;if($("#cs"))$("#cs").onchange=e=>{N>=7?bc=+e.target.value:cs=+e.target.value;lobby()};
  // 다른 인물의 기본 이름과 같으면 모둠원끼리 헷갈리므로 입장을 막는다
  const upd=()=>{name=$("#n").value.trim();ch.forEach((c,i)=>{const s=i===me&&name?name:c[0];$("#p"+i).textContent=s;$("#a"+i).textContent=[...s][0]});
   const dup=ch.findIndex((c,i)=>i!==me&&c[0]===name),w=$("#nw");w.hidden=dup<0;if(dup>=0)w.textContent="‘"+name+"’"+jo(name,"은","는").slice(name.length)+" 다른 인물("+ch[dup][1]+")의 이름과 같아요. 성을 빼거나 별명을 써 주세요.";
-  $("#go").disabled=!name||dup>=0};
+  const tk=taken(me);if(tk&&dup<0){w.hidden=false;w.textContent="‘"+tk+"’님이 이미 이 인물을 골랐어요. 다른 인물을 골라 주세요."}
+  $("#go").disabled=!name||dup>=0||!!tk};
  $("#n").oninput=upd;
  app.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{R=+b.dataset.r;lobby()});
  app.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{g=+b.dataset.g;lobby()});
  app.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{N=+b.dataset.n;lobby()});
  app.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{me=+b.dataset.c;lobby()});
- $("#go").onclick=start;upd();
+ $("#go").onclick=start;upd();bindRoom();
+ if(follower())app.querySelectorAll("[data-g],[data-n],[data-r],#cs").forEach(b=>b.disabled=true);
  if($("#rs0")){$("#rs0").onclick=()=>resume(sv);$("#rs1").onclick=()=>{clearSave();lobby()}}
 }
 // 선생님 화면: 모둠 1~10의 정답을 인원·판별로 보여 준다. 학생이 실수로 열지 않게 문구 입력을 거친다
 let TB=null;// 선생님 화면에 들어오기 전 인원·판 — 나갈 때 되돌린다
 const tExit=()=>{if(TB){[N,R,cs,bc]=TB;TB=null}lobby()};
 function teacher(open){
- clearInterval(tm);run=false;if(!TB)TB=[N,R,cs,bc];
+ scr="teacher";clearInterval(tm);run=false;if(!TB)TB=[N,R,cs,bc];
  if(!open){app.innerHTML=hd("TEACHER","선생님 화면",`<p class="s">모둠별 범인과 정답이 나와요. 학생이 보지 않게 주의하세요.</p>`)+`<label>계속하려면 ‘정답 보기’라고 입력하세요</label><input id="tp" autocomplete="off"><div class="two"><button class="btn sub" id="tb">돌아가기</button><button class="btn" id="tg">열기</button></div>`;
   $("#tb").onclick=tExit;$("#tg").onclick=()=>$("#tp").value.replace(/\s/g,"")==="정답보기"?teacher(1):toast("‘정답 보기’라고 입력해 주세요.");return}
  const g0=g,m0=me;let rows="";
@@ -566,8 +603,8 @@ function build(){
   if(r==="Z")P("확인 · "+n,c[2]+" 근처에 있던 선생님 말씀: "+T+" 중간쯤 그곳에서 "+n+"의 혼잣말 소리를 들었다. 현장까지 다녀오기엔 짧은 시간이었다.",5,1)});
  order=PL.map((_,p)=>sh(cl.map((c,i)=>i).filter(i=>cl[i].p===p),g*31+me*7+p+R*17));
  }
-function start(){build();notes=[];fl=new Set();voted=null;voted2=null;gv=null;gv2=null;abU=null;act=null;aSel=aTgt=null;nt={};sel=null;sel2=null;memo=ch.map(()=>0);step=0;sec=TLm();render()}
-function resume(s){g=s.g;N=s.N;R=s.R||1;cs=s.cs||0;bc=s.bc||0;me=s.me;name=s.name;setup();build();notes=s.notes||[];fl=new Set(s.fl||[]);voted=s.voted;voted2=s.voted2==null?null:s.voted2;gv=s.gv==null?null:s.gv;gv2=s.gv2==null?null:s.gv2;abU=s.abU==null?null:s.abU;act=s.act||null;aSel=aTgt=null;nt=s.nt||{};sel=null;sel2=null;memo=s.memo||ch.map(()=>0);step=s.step||0;sec=TLm();render()}
+function start(){build();notes=[];fl=new Set();voted=null;voted2=null;gv=null;gv2=null;abU=null;act=null;aSel=aTgt=null;nt={};sel=null;sel2=null;memo=ch.map(()=>0);step=follower()?RM.step:0;sec=TLm();render();mpMe()}
+function resume(s){g=s.g;N=s.N;R=s.R||1;cs=s.cs||0;bc=s.bc||0;me=s.me;name=s.name;setup();build();notes=s.notes||[];fl=new Set(s.fl||[]);voted=s.voted;voted2=s.voted2==null?null:s.voted2;gv=s.gv==null?null:s.gv;gv2=s.gv2==null?null:s.gv2;abU=s.abU==null?null:s.abU;act=s.act||null;aSel=aTgt=null;nt=s.nt||{};sel=null;sel2=null;memo=s.memo||ch.map(()=>0);step=s.step||0;sec=TLm();render();if(s.room)mpJoin(s.room)}
 const D=()=>N>=7?[3,2]:N===3?[3,2]:N===4?[4,3]:N===5?[4,3]:[5,3];
 // 심층 단서(d)는 2차 조사에서만 나온다. 능력 ‘먼저 보기’로 얻은 카드(x)는 조사 기회를 쓰지 않는다
 // 다인원 팀: 1차는 인물 순서대로(홀수 번째 A팀), 2차는 서로 바꿔 상대 팀 장소를 조사한다
@@ -679,8 +716,8 @@ function printView(G){
  $("#pp").onclick=()=>window.print();
  $("#pb").onclick=()=>{[g,me,name]=P0;setup();teacher(1)}}
 function render(){
- const mine=isBad(me),c=ch[me];
- let h=hd(`CASE FILE · ${String(g).padStart(2,"0")}모둠 · ${N}명 · ${R}판`,st.t,`<p class="s">수사관 ${av(me,name)} <i class="me">${esc(name)}</i> · ${c[1]}</p>`)+`
+ scr="game";const mine=isBad(me),c=ch[me];
+ let h=hd(`CASE FILE · ${String(g).padStart(2,"0")}모둠 · ${N}명 · ${R}판`,st.t,`<p class="s">수사관 ${av(me,name)} <i class="me">${esc(name)}</i> · ${c[1]}${RM?" · 방 "+RM.code+(RM.host?" (방장)":""):""}</p>`)+`
  <div class="steps">${SS.map((s,i)=>`<div class="${i<step?"d":i===step?"cur":""}"><i></i>${s}</div>`).join("")}</div>`;
  if(step===0){
   const [who,my,goal]=pcard(me);
@@ -704,12 +741,13 @@ function render(){
    <h3 class="vq">범인은 누구일까요?</h3>${ch.map((x,i)=>vr(i,"data-v",i===sel)).join("")}
    <h3 class="vq">${st.m?"상자를 옮긴 공범은 누구일까요?":"범인은 아니지만, 사건과 관계없는 비밀 때문에 거짓말한 사람은?"}</h3>${ch.map((x,i)=>vr(i,"data-v2",i===sel2)).join("")}
    <button class="btn go" data-a="vote" ${okv?"":"disabled"}>${okv?"범인 "+esc(nm[sel])+" · "+L2+" "+esc(nm[sel2])+" — 확정 (되돌릴 수 없어요)":sel!==null&&sel===sel2?"서로 다른 두 사람을 골라 주세요":"두 질문에 모두 답해 주세요"}</button>`}
-  else if(ph===2){const okg=sel!==null&&(!st.m||sel2!==null&&sel!==sel2);
+  else if(ph===2){autoSel();h+=tally();const okg=sel!==null&&(!st.m||sel2!==null&&sel!==sel2);
    h+=`<p class="s"><b>② 모둠 투표</b> — 모두 함께 ‘셋, 둘, 하나!’ 하고 동시에 범인이라고 생각하는 사람을 손가락으로 가리키세요. 가장 많이 지목된 사람을 고르세요. ${st.m?"이어서 같은 방법으로 공범도 가리켜요. ":""}동점이면 1분 더 이야기한 뒤 다시 가리켜요.</p>${st.m?'<h3 class="vq">모둠이 고른 범인</h3>':""}${ch.map((x,i)=>vr(i,"data-w",i===sel,i===voted?'<span class="tag">내 지목</span>':"")).join("")}${st.m?'<h3 class="vq">모둠이 고른 공범</h3>'+ch.map((x,i)=>vr(i,"data-w2",i===sel2,i===voted2?'<span class="tag">내 지목</span>':"")).join(""):""}<button class="btn go" data-a="gvote" ${okg?"":"disabled"}>${okg?(st.m?"범인 "+esc(nm[sel])+" · 공범 "+esc(nm[sel2]):esc(nm[sel]))+" — 모둠 결과로 확정":st.m&&sel!==null&&sel===sel2?"서로 다른 두 사람을 골라 주세요":"가장 많이 지목된 사람을 고르세요"}</button>`}
   else h+=ch.map((x,i)=>{const r=ro(i);return vr(i,"",i===gv||st.m&&i===gv2,(i===voted?'<span class="tag">내 지목</span>':"")+(i===gv?`<span class="tag">모둠 ${st.m?"범인":"지목"}</span>`:"")+(st.m&&i===gv2?'<span class="tag">모둠 공범</span>':"")+(r==="C"?`<span class="tag cb" ${hid()}>범인</span>`:"")+(st.m&&r==="A"?`<span class="tag cb" ${hid()}>공범</span>`:"")+((st.m?"SP":"S").includes(r)?`<span class="tag cb" ${hid()}>비밀</span>`:""))}).join("");
-  if(ph===3){h+=`<p class="s" style="margin-top:14px">아래 진상 카드를 열면 결과가 나와요.</p><div class="res ${win?"":"no"}" id="rs" style="display:${fl.has("e1")?"block":"none"}"><div class="stamp">${mine?["도주 성공","절반 도주","체포"][k]:ind==="X"?"취재 끝":ind==="Q"?(qok?"단짝 지킴":"단짝 지목됨"):ind==="V"?(vok?"수집 성공":"수집 미완"):ind==="Z"?(zok?"라이벌 승리":"라이벌 패배"):ind==="Y"?"평화주의자":["추리 실패","절반 해결","사건 해결"][k]}</div><br>${ind?"모둠의 결과: "+["범인과 공범 모두 놓쳤어요.","범인과 공범 중 한 명만 맞혔어요.","범인과 공범을 모두 찾았어요."][k]+" 하지만 당신의 목표는 따로 있었어요.":mine?[st.m?"아무도 당신들을 잡지 못했어요!":"아무도 당신을 잡지 못했어요!","둘 중 한 명이 들켰어요.",st.m?"모둠이 범인과 공범을 모두 찾아냈어요.":"모둠이 당신을 찾아냈어요."][k]:["범인은 다른 사람이었어요.","범인과 공범 중 한 명만 맞혔어요.","모둠의 추리가 맞았어요!"][k]}<h3>나의 목표</h3><ul class="gl">${goals(me).map((x,j)=>{if(x[1]){const v=x[1]();return`<li class="${v?"":"n"}"><b>${v?"✔":"✘"}</b>${rep(x[0])}</li>`}const k="ck"+j,v=fl.has(k);return`<li><button class="ck" data-ck="${k}" aria-pressed="${v}" aria-label="달성 표시">${v?"✔":""}</button>${rep(x[0])}<small>스스로 체크</small></li>`}).join("")}</ul><h3>나의 결말</h3>${esc(myEnd(me))}</div><div class="grid" style="margin-top:14px">${card("e1","진상","ENDING",st.m?"범인과 공범":"범인",rep(ans()),1,"star")}${card("e5","풀이","ENDING","다른 사람은 왜 아니었을까",ch.map((x,i)=>isBad(i)||i===cu?"":rep(why(i))).filter(Boolean).join("<br><br>"),1,"search")}${card("e2",st.b?"반전":"동기","ENDING",st.b?"범인도 몰랐던 진실":"왜 그랬을까",st.m?"범인: "+esc(ch[cu][4])+".<br><br>공범: "+rep("단짝 {"+cu+"}의 부탁을 거절하지 못했어요."):st.b?rep("{"+cu+"}")+" 본인도 몰랐어요."+(me===cu?" 바로 당신이에요!":"")+" 일부러 한 일이 아니었거든요: "+esc(ch[cu][4])+".":esc(ch[cu][4])+".",1,"chat")}${card("e4","수법","ENDING","범인은 이렇게 했어요",rep(st.how.replace(/\{c\}/g,"{"+cu+"}").replace(/\{a\}/g,"{"+a2+"}").replace(/\{p\}/g,ch[cu][2])),1,"foot")}${card("e3","그 후","ENDING","에필로그",esc(st.f.replace(/\{p\}/g,ch[cu][2]))+" "+esc(st.ep),1,"school")}</div><div class="two"><button class="btn" data-a="nx">다음 판 (${R%9+1}판)</button><button class="btn sub" data-a="re">처음으로</button></div><p class="s" style="margin-top:10px">다음 판은 모둠원 모두 같이 눌러 주세요. 같은 사건이지만 범인이 바뀌어요.</p>`}
+  if(ph===3){h+=`${tally()}<p class="s" style="margin-top:14px">아래 진상 카드를 열면 결과가 나와요.</p><div class="res ${win?"":"no"}" id="rs" style="display:${fl.has("e1")?"block":"none"}"><div class="stamp">${mine?["도주 성공","절반 도주","체포"][k]:ind==="X"?"취재 끝":ind==="Q"?(qok?"단짝 지킴":"단짝 지목됨"):ind==="V"?(vok?"수집 성공":"수집 미완"):ind==="Z"?(zok?"라이벌 승리":"라이벌 패배"):ind==="Y"?"평화주의자":["추리 실패","절반 해결","사건 해결"][k]}</div><br>${ind?"모둠의 결과: "+["범인과 공범 모두 놓쳤어요.","범인과 공범 중 한 명만 맞혔어요.","범인과 공범을 모두 찾았어요."][k]+" 하지만 당신의 목표는 따로 있었어요.":mine?[st.m?"아무도 당신들을 잡지 못했어요!":"아무도 당신을 잡지 못했어요!","둘 중 한 명이 들켰어요.",st.m?"모둠이 범인과 공범을 모두 찾아냈어요.":"모둠이 당신을 찾아냈어요."][k]:["범인은 다른 사람이었어요.","범인과 공범 중 한 명만 맞혔어요.","모둠의 추리가 맞았어요!"][k]}<h3>나의 목표</h3><ul class="gl">${goals(me).map((x,j)=>{if(x[1]){const v=x[1]();return`<li class="${v?"":"n"}"><b>${v?"✔":"✘"}</b>${rep(x[0])}</li>`}const k="ck"+j,v=fl.has(k);return`<li><button class="ck" data-ck="${k}" aria-pressed="${v}" aria-label="달성 표시">${v?"✔":""}</button>${rep(x[0])}<small>스스로 체크</small></li>`}).join("")}</ul><h3>나의 결말</h3>${esc(myEnd(me))}</div><div class="grid" style="margin-top:14px">${card("e1","진상","ENDING",st.m?"범인과 공범":"범인",rep(ans()),1,"star")}${card("e5","풀이","ENDING","다른 사람은 왜 아니었을까",ch.map((x,i)=>isBad(i)||i===cu?"":rep(why(i))).filter(Boolean).join("<br><br>"),1,"search")}${card("e2",st.b?"반전":"동기","ENDING",st.b?"범인도 몰랐던 진실":"왜 그랬을까",st.m?"범인: "+esc(ch[cu][4])+".<br><br>공범: "+rep("단짝 {"+cu+"}의 부탁을 거절하지 못했어요."):st.b?rep("{"+cu+"}")+" 본인도 몰랐어요."+(me===cu?" 바로 당신이에요!":"")+" 일부러 한 일이 아니었거든요: "+esc(ch[cu][4])+".":esc(ch[cu][4])+".",1,"chat")}${card("e4","수법","ENDING","범인은 이렇게 했어요",rep(st.how.replace(/\{c\}/g,"{"+cu+"}").replace(/\{a\}/g,"{"+a2+"}").replace(/\{p\}/g,ch[cu][2])),1,"foot")}${card("e3","그 후","ENDING","에필로그",esc(st.f.replace(/\{p\}/g,ch[cu][2]))+" "+esc(st.ep),1,"school")}</div><div class="two"><button class="btn" data-a="nx" ${follower()?"disabled":""}>${follower()?"다음 판은 방장이 눌러요":`다음 판 (${R%9+1}판)`}</button><button class="btn sub" data-a="re">처음으로</button></div><p class="s" style="margin-top:10px">다음 판은 모둠원 모두 같이 눌러 주세요. 같은 사건이지만 범인이 바뀌어요.</p>`}
  }
- if(step<5)h+=`<div class="two">${step?`<button class="btn sub" data-a="prev">이전</button>`:""}<button class="btn" data-a="next">${step===4?"투표하러 가기":"다음 단계"}</button></div>`;
+ if(step<5&&follower())h+=`<div class="note">다음 단계는 방장이 넘겨요. 방장 화면이 넘어가면 이 화면도 함께 넘어가요.<br><button class="btn sub" data-a="solo" style="margin-top:8px;padding:6px 12px;font-size:14px">방에서 나가 혼자 진행하기</button></div>`;
+ else if(step<5)h+=`<div class="two">${step?`<button class="btn sub" data-a="prev">이전</button>`:""}<button class="btn" data-a="next">${step===4?"투표하러 가기":"다음 단계"}</button></div>`;
  h+=prefBar();
  app.innerHTML=h;fit();window.scrollTo(0,0);save();
 }
@@ -731,8 +769,9 @@ app.addEventListener("click",e=>{
   tick();tlab();return}
  if(b=q("[data-a]")){const a=b.dataset.a;
   if(a==="re"){clearSave();return lobby()}
-  if(a==="nx"){clearSave();R=R%9+1;return lobby()}
-  if(a==="vote"){if(sel===null||sel2===null||sel===sel2)return;voted=sel;voted2=sel2;sel=sel2=null;render();return}
+  if(a==="nx"){if(follower())return;clearSave();R=R%9+1;if(RM)MP.set(RM.code,{rd:RM.rd+1,step:0,cfg:{g,N,R,cs,bc}}).catch(()=>{});return lobby()}
+  if(a==="solo"){mpLeave();return render()}
+  if(a==="vote"){if(sel===null||sel2===null||sel===sel2)return;voted=sel;voted2=sel2;sel=sel2=null;mpVote();render();return}
   if(a==="ab"){const k=abOf(me);if(abU!=null||!AB[k][2].includes(step))return;
    // C·F: 우리 쪽 심층 단서 한 장 / H: 다른 팀 장소의 단서 한 장 — 모두 조사 기회를 쓰지 않는다
    if("CFH".includes(k)){const mine2=x=>!st.m||side(cl[x].p)===curT(),c=sh(cl.map((x,i)=>i).filter(i=>!notes.some(n=>n.i===i)&&(k==="H"?!mine2(i)&&(step===3||!cl[i].d):cl[i].d&&mine2(i))),g+me*5+R);if(!c.length)return toast("더 얻을 단서가 없어요.");notes.push({i:c[0],s:step,x:1});fl.add("n"+(notes.length-1))}
@@ -746,8 +785,44 @@ app.addEventListener("click",e=>{
   if(a==="prev")step--;
   else{if(step===0&&!["a","b","c","d","f","tl"].every(k=>fl.has(k)))return toast("카드 6장을 모두 열어 읽어 주세요.");
    if((step===1||step===3)&&left()>0)return toast("조사 기회가 "+left()+"번 남았어요.");step++;sec=TLm()}
-  clearInterval(tm);run=false;render()}
+  clearInterval(tm);run=false;render();mpStep()}
 });
 app.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("card")){e.preventDefault();e.target.click()}});
 applyPR();lobby();
+</script>
+<script type="module">
+// 온라인 방 (Firebase Realtime Database · 익명 로그인). 불러오기나 로그인에 실패하면 mpState("off")로 알리고 게임은 혼자 진행된다
+// Realtime Database 규칙 (Firebase 콘솔 → Realtime Database → 규칙에 붙여 넣기):
+// {"rules":{"rooms":{"$code":{
+//   ".read":"auth != null",
+//   ".write":"auth != null && !data.exists() && newData.child('host').val() === auth.uid && $code.matches(/^[A-Z0-9]{4,6}$/)",
+//   "cfg":{".write":"auth != null && data.parent().child('host').val() === auth.uid"},
+//   "step":{".write":"auth != null && data.parent().child('host').val() === auth.uid"},
+//   "rd":{".write":"auth != null && data.parent().child('host').val() === auth.uid"},
+//   "players":{"$uid":{".write":"auth != null && auth.uid === $uid"}},
+//   "votes":{"$rd":{"$uid":{".write":"auth != null && auth.uid === $uid && !data.exists()"}}}
+// }}}}
+const firebaseConfig={
+ apiKey:"AIzaSyCOdpmgB1GSl3PTSx_YgME9lP-ef71KHVE",
+ authDomain:"mystery-54602.firebaseapp.com",
+ databaseURL:"https://mystery-54602-default-rtdb.asia-southeast1.firebasedatabase.app",
+ projectId:"mystery-54602",
+ storageBucket:"mystery-54602.firebasestorage.app",
+ messagingSenderId:"765554068901",
+ appId:"1:765554068901:web:6fbd2ef699273752f36c4c"};
+const U="https://www.gstatic.com/firebasejs/10.12.2/firebase-";
+(async()=>{try{
+ const[{initializeApp},{getAuth,signInAnonymously},D]=await Promise.all(["app","auth","database"].map(m=>import(U+m+".js")));
+ const fa=initializeApp(firebaseConfig),db=D.getDatabase(fa),{user}=await signInAnonymously(getAuth(fa)),uid=user.uid;
+ const rm=c=>D.ref(db,"rooms/"+c);let un=null,pr=null;
+ window.MP={uid,
+  // 같은 코드의 방이 이미 있으면 트랜잭션이 취소된다
+  async create(c,cfg){const r=await D.runTransaction(rm(c),v=>v?undefined:{host:uid,cfg,step:0,rd:1});if(!r.committed)throw Error("이미 있는 방 코드예요. 다른 코드를 쓰세요.");return this.join(c)},
+  async join(c){const s=await D.get(rm(c));if(!s.exists())throw Error("없는 방 코드예요.");this.leave();
+   pr=D.ref(db,"rooms/"+c+"/players/"+uid);D.onDisconnect(pr).remove();un=D.onValue(rm(c),x=>{if(x.exists())mpRoom(c,x.val())})},
+  leave(){if(un){un();un=null}if(pr){D.onDisconnect(pr).cancel();D.remove(pr).catch(()=>{});pr=null}},
+  me:(c,slot,name)=>D.set(D.ref(db,"rooms/"+c+"/players/"+uid),{me:slot,name}),
+  set:(c,o)=>D.update(rm(c),o),
+  vote:(c,rd,v)=>D.set(D.ref(db,"rooms/"+c+"/votes/"+rd+"/"+uid),v)};
+ mpState("on")}catch(e){console.warn(e);mpState("off","연결하지 못했어요")}})();
 </script></body></html>
