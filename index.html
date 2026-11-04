@@ -489,18 +489,10 @@ function mpRoom(code,v){const p=RM;RM={code,host:v.host===MP.uid,step:v.step|0,r
  const n2=names(),nc=n2.join()!==nm.join();nm=n2;
  if(!RM.host&&RM.step!==step){step=RM.step;sec=TLm();clearInterval(tm);run=false;render();return}
  if(step===5||nc){const y=scrollY;render();scrollTo(0,y)}}
-const roomBox=()=>{const n=Object.values(RM?RM.players:{}).filter(x=>x&&x.name).length;
- if(MPS==="wait")return`<div class="note">온라인 연결 중…</div>`;
- if(MPS==="off")return`<div class="note"><b>온라인 방을 쓸 수 없어요</b>${MPM?" ("+esc(MPM)+")":""}<br><small>이 기기로만 진행해요. 모둠원은 같은 모둠 번호·인원·사건 코드를 직접 맞춰 주세요.</small></div>`;
- if(RM)return`<div class="note"><small>${RM.host?"내가 방장이에요":"모둠원으로 참여 중이에요"}</small><div style="font-size:30px;font-weight:700;letter-spacing:.18em;margin:2px 0 6px">${RM.code}</div><small>${n}명 준비됨 · ${RM.host?"친구들에게 이 방 코드를 알려 주세요. 모둠 설정과 게임 단계는 방장이 바꾸면 모두 함께 바뀌어요.":"모둠 설정과 게임 단계는 방장을 따라가요."}</small><div class="two"><button class="btn sub" id="rmx">방 나가기</button></div></div>`;
- return`<div class="note"><b>온라인으로 함께 하기</b> <span class="hint">(선택)</span><br><small>방을 쓰면 모둠원 기기의 설정과 게임 단계가 자동으로 맞춰져요. 안 쓰면 아래 ‘내 이름’부터 이 기기로만 진행해요.</small></div>
-<label>모둠에서 한 명 (방장)</label><button class="btn sub" id="rmc">새 방 만들기</button>
-<label for="rc">방 코드를 받았어요 <span class="hint">(영문 대문자·숫자 4~6자리)</span></label><div class="kc"><input id="rc" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="예: AB12C" value="${esc(rcv)}"><button class="btn sub" id="rmj">입장</button></div>`};
-// 로비에서도 내 이름·인물을 방에 알려, 다른 모둠원 화면에 ‘사용 중’이 바로 보이게 한다
-let mpT=0;const mpPing=()=>{clearTimeout(mpT);mpT=setTimeout(()=>{if(!RM||!name)return;const p=RM.players[MP.uid];if(!p||p.me!==me||p.name!==name)mpMe()},400)};
+const roomBox=()=>MPS==="wait"?`<div class="note">온라인 방 연결 중…</div>`:MPS==="off"?`<div class="note">온라인 방을 쓸 수 없어요${MPM?" ("+esc(MPM)+")":""}. 지금처럼 기기마다 혼자 진행하면 돼요.</div>`:RM?`<div class="note"><b>방 ${RM.code}</b> · ${RM.host?"방장":"모둠원"} · ${Object.keys(RM.players).length}명 입장<br><small>${RM.host?"모둠 번호·인원·사건·사건 코드를 바꾸면 모둠원 기기도 함께 바뀌어요. 게임 단계는 방장이 넘겨요.":"모둠 번호·인원·사건·사건 코드는 방장 설정을 따라요. 게임 단계도 방장이 넘겨요."}</small><div class="two"><button class="btn sub" id="rmx">방 나가기</button></div></div>`:`<label for="rc">함께 하기 <span class="hint">(방 코드: 영문 대문자·숫자 4~6자리)</span></label><input id="rc" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="비워 두고 만들면 자동으로 정해져요" value="${esc(rcv)}"><div class="two"><button class="btn sub" id="rmc">방 만들기</button><button class="btn sub" id="rmj">방 입장</button></div>`;
 const bindRoom=()=>{const i=$("#rc"),ok=c=>/^[A-Z0-9]{4,6}$/.test(c)||(toast("방 코드는 영문 대문자·숫자 4~6자리예요."),false);
  if(i)i.oninput=()=>{i.value=rcv=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"")};
- if($("#rmc"))$("#rmc").onclick=()=>mpJoin(rcode(),1);
+ if($("#rmc"))$("#rmc").onclick=()=>{const c=rcv||rcode();if(ok(c))mpJoin(c,1)};
  if($("#rmj"))$("#rmj").onclick=()=>{if(ok(rcv))mpJoin(rcv)};
  if($("#rmx"))$("#rmx").onclick=()=>{mpLeave();lobby()}};
 // 방 투표 집계 [[인물 번호, 표 수], …] 많은 순
@@ -563,17 +555,18 @@ function lobby(){
   if($("#rs0")){$("#rs0").onclick=()=>resume(sv);$("#rs1").onclick=()=>{clearSave();lobby()}}
   window.scrollTo(0,0);return}
  const fw=follower(),cn=(N>=7?bc:cs)?esc(caseOf(N,cs,bc,g).t):"모둠 번호대로";
- app.innerHTML=top+`<div id="rm">${roomBox()}</div><label for="n">내 이름</label><input id="n" maxlength="8" placeholder="이름을 입력하세요" value="${esc(name)}">
- ${RM?"":`<label for="k">사건 코드 <span class="hint">(한 명만 뽑고, 모둠원은 같은 코드를 입력하세요)</span></label><div class="kc"><input id="k" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="세 자리 숫자" value="${R||""}"><button class="btn sub" id="kd">${R?"다시 뽑기":"범인 뽑기"}</button></div>`}
- <details class="fold" id="lo0" ${lo[0]&&!fw?"open":""}><summary><b>${g}모둠 · ${N}명</b> · 사건: ${cn}<span class="hint">${RM?"사건 코드 "+(R||"…")+" · ":""}${fw?"방장 설정":"바꾸기"}</span></summary>${fw?`<p class="s">모둠 번호·인원·사건은 방장 설정을 따라요.</p>`:`<p class="s">모둠원 모두 같은 설정을 골라야 해요. 하나라도 다르면 범인이 달라져요.</p>
+ app.innerHTML=top+`<label for="n">내 이름</label><input id="n" maxlength="8" placeholder="이름을 입력하세요" value="${esc(name)}">
+ <label for="k">사건 코드 <span class="hint">${RM?(fw?"(방장이 뽑아요)":"(모둠원 기기에 자동으로 맞춰져요)"):"(한 명만 뽑고, 모둠원은 같은 코드를 입력하세요)"}</span></label><div class="kc"><input id="k" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="세 자리 숫자" value="${R||""}" ${RM?"readonly":""}>${fw?"":`<button class="btn sub" id="kd">${R?"다시 뽑기":"범인 뽑기"}</button>`}</div>
+ <details class="fold" id="lo0" ${lo[0]&&!fw?"open":""}><summary><b>${g}모둠 · ${N}명</b> · 사건: ${cn}<span class="hint">${fw?"방장 설정":"바꾸기"}</span></summary>${fw?`<p class="s">모둠 번호·인원·사건은 방장 설정을 따라요.</p>`:`<p class="s">모둠원 모두 같은 설정을 골라야 해요. 하나라도 다르면 범인이 달라져요.</p>
  <label>모둠 번호</label><div class="seg" style="flex-wrap:wrap">${[1,2,3,4,5,6,7,8,9,10].map(i=>`<button data-g="${i}" class="${i===g?"on":""}">${i}</button>`).join("")}</div>
  <label>모둠 인원</label><div class="seg">${[3,4,5,6,7,8,9,10].map(i=>`<button data-n="${i}" class="${i===N?"on":""}">${i}</button>`).join("")}</div>
  <label for="cs">사건</label>${caseSel()}${N>=7?`<p class="s" style="margin:6px 0 0">7~10명은 다인원 전용 사건이에요. 범인과 공범 두 명을 찾고, A팀·B팀으로 나눠 조사해요.</p>`:""}`}</details>
+ <details class="fold" id="lo1" ${lo[1]||RM?"open":""}><summary><b>온라인 방</b>${RM?" · "+RM.code:""}<span class="hint">${RM?(RM.host?"방장":"모둠원"):"선택"}</span></summary><div id="rm">${roomBox()}</div></details>
  <label>내가 맡을 인물 <span class="hint">(모둠원끼리 서로 다른 인물을 고르세요)</span></label>
  ${ch.map((c,i)=>`<button class="row ${i===me?"on":""}" data-c="${i}"><span class="av" id="a${i}" style="--h:${HU[i]}"></span><b id="p${i}"></b>${taken(i)?`<span class="tag">${esc(taken(i))} 사용 중</span>`:""}<small>${c[1]}</small></button>`).join("")}
  <div class="warn" id="nw" hidden></div>
- <button class="btn go" id="go">${RM?"게임 화면으로 들어가기":"사건 현장으로 입장"}</button><div class="two"><button class="btn sub" id="lb">${RM?"방 나가고 처음으로":"이전"}</button></div>${prefBar()}`;
- $("#lb").onclick=()=>{if(RM)mpLeave();lv=0;lobby()};$("#lo0").ontoggle=e=>lo[0]=e.target.open?1:0;
+ <button class="btn go" id="go">사건 현장으로 입장</button><div class="two"><button class="btn sub" id="lb">이전</button></div>${prefBar()}`;
+ $("#lb").onclick=()=>{if(RM)mpLeave();lv=0;lobby()};[0,1].forEach(k=>$("#lo"+k).ontoggle=e=>lo[k]=e.target.open?1:0);
  if($("#cs"))$("#cs").onchange=e=>{N>=7?bc=+e.target.value:cs=+e.target.value;lobby()};
  // 다른 인물의 기본 이름과 같으면 모둠원끼리 헷갈리므로 입장을 막는다
  const upd=()=>{name=$("#n").value.trim();ch.forEach((c,i)=>{const s=i===me&&name?name:c[0];$("#p"+i).textContent=s;$("#a"+i).textContent=[...s][0]});
@@ -582,10 +575,10 @@ function lobby(){
   // 온라인 방은 모둠원 이름이 화면에 그대로 나오므로 같은 이름도 막는다
   const sm=!!RM&&!!name&&Object.entries(RM.players).some(([u,x])=>u!==MP.uid&&x&&x.me!==me&&x.name===name);
   if(sm&&dup<0&&!tk){w.hidden=false;w.textContent="‘"+name+"’"+jo(name,"은","는").slice(name.length)+" 이미 다른 모둠원이 쓰는 이름이에요. 성을 붙이거나 별명을 써 주세요."}
-  if(name&&!R&&dup<0&&!tk&&!sm){w.hidden=false;w.textContent=RM?"방장 설정을 불러오는 중이에요…":"사건 코드를 뽑거나, 모둠원이 뽑은 코드를 입력해 주세요."}
-  $("#go").disabled=!name||dup>=0||!!tk||sm||!R;mpPing()};
+  if(name&&!R&&dup<0&&!tk&&!sm){w.hidden=false;w.textContent="사건 코드를 뽑거나, 모둠원이 뽑은 코드를 입력해 주세요."}
+  $("#go").disabled=!name||dup>=0||!!tk||sm||!R};
  $("#n").oninput=upd;
- if($("#k"))$("#k").oninput=e=>{const v=e.target.value.replace(/\D/g,"");e.target.value=v;R=v.length===3?+v:0;upd()};
+ $("#k").oninput=e=>{const v=e.target.value.replace(/\D/g,"");e.target.value=v;R=v.length===3?+v:0;upd()};
  // 오프라인에서 받은 코드를 실수로 다시 뽑으면 이 기기만 범인이 달라진다
  if($("#kd"))$("#kd").onclick=()=>{if(R&&!RM&&!confirm("새로 뽑으면 모둠원 모두 새 코드를 다시 입력해야 해요. 새로 뽑을까요?"))return;R=nK();lobby()};
  app.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{g=+b.dataset.g;lobby()});
@@ -635,7 +628,7 @@ function build(){
   if(r==="Z")P("확인 · "+n,c[2]+" 근처에 있던 선생님 말씀: "+T+" 중간쯤 그곳에서 "+n+"의 혼잣말 소리를 들었다. 현장까지 다녀오기엔 짧은 시간이었다.",5,1)});
  order=PL.map((_,p)=>sh(cl.map((c,i)=>i).filter(i=>cl[i].p===p),g*31+me*7+p+R*17));
  }
-function start(){build();notes=[];fl=new Set();voted=null;voted2=null;gv=null;gv2=null;abU=null;act=null;aSel=aTgt=null;nt={};sel=null;sel2=null;memo=ch.map(()=>0);step=follower()?RM.step:0;sec=TLm();render();mpMe()}
+function start(){rcO=[0,0];build();notes=[];fl=new Set();voted=null;voted2=null;gv=null;gv2=null;abU=null;act=null;aSel=aTgt=null;nt={};sel=null;sel2=null;memo=ch.map(()=>0);step=follower()?RM.step:0;sec=TLm();render();mpMe()}
 function resume(s){g=s.g;N=s.N;R=s.R||0;cs=s.cs||0;bc=s.bc||0;me=s.me;name=s.name;setup();build();notes=s.notes||[];fl=new Set(s.fl||[]);voted=s.voted;voted2=s.voted2==null?null:s.voted2;gv=s.gv==null?null:s.gv;gv2=s.gv2==null?null:s.gv2;abU=s.abU==null?null:s.abU;act=s.act||null;aSel=aTgt=null;nt=s.nt||{};sel=null;sel2=null;memo=s.memo||ch.map(()=>0);step=s.step||0;sec=TLm();render();if(s.room)mpJoin(s.room)}
 const D=()=>N>=7?[3,2]:N===3?[3,2]:N===4?[4,3]:N===5?[4,3]:[5,3];
 // 심층 단서(d)는 2차 조사에서만 나온다. 능력 ‘먼저 보기’로 얻은 카드(x)는 조사 기회를 쓰지 않는다
@@ -747,10 +740,17 @@ function printView(G){
  app.innerHTML=h;window.scrollTo(0,0);
  $("#pp").onclick=()=>window.print();
  $("#pb").onclick=()=>{[g,me,name]=P0;setup();teacher(1)}}
+// 프롤로그 다시 보기: 진행 중에도 사건 정보와 내 카드·목표를 접었다 펼쳐 볼 수 있다 (열림 상태는 다시 그려져도 유지)
+let rcO=[0,0];
+const recap=()=>{if(!step)return"";const [w,m,o]=pcard(me),T=(t,b)=>`<div class="pc"><i>${t}</i>${b}</div>`;
+ return`<details class="fold" data-rc="0" ${rcO[0]?"open":""}><summary><b>사건 정보 다시 보기</b><span class="hint">${rcO[0]?"접기":"펼치기"}</span></summary>${T("사건 개요",rep(st.i))}${T("사건이 일어나기 전",rep(st.i2))}${T("그날의 시간표",st.tl.map(rep).join("<br>"))}</details>
+ <details class="fold" data-rc="1" ${rcO[1]?"open":""}><summary><b>내 카드·목표 다시 보기</b> <small>· 남에게 보여 주지 마세요</small><span class="hint">${rcO[1]?"접기":"펼치기"}</span></summary>${T("나는 누구인가",w)}${T("그날의 행적",m)}${T("내 목표",o)}</details>`};
+app.addEventListener("toggle",e=>{const d=e.target;if(!d.dataset||d.dataset.rc==null)return;rcO[+d.dataset.rc]=d.open?1:0;const h=d.querySelector("summary .hint");if(h)h.textContent=d.open?"접기":"펼치기"},true);
 function render(){
  scr="game";const mine=isBad(me),c=ch[me];
  let h=hd(`CASE FILE · ${String(g).padStart(2,"0")}모둠 · ${N}명 · 코드 ${R}`,st.t,`<p class="s">수사관 ${av(me,name)} <i class="me">${esc(name)}</i> · ${c[1]}${RM?" · 방 "+RM.code+(RM.host?" (방장)":""):""}</p>`)+`
  <div class="steps">${SS.map((s,i)=>`<div class="${i<step?"d":i===step?"cur":""}"><i></i>${s}</div>`).join("")}</div>`;
+ h+=recap();
  if(step===0){
   const [who,my,goal]=pcard(me);
   h+=`<div class="idc">${av(me,name)}<div><b>내 역할: ${esc(c[1])}</b> <span class="hint">(원래 이름 ${esc(c[0])})</span>${st.m?`<br><b>${teamName(me)}</b>`:""}<br><small>모둠원끼리 역할을 소리 내어 말하고, 겹치는 사람이 없는지 확인하세요.</small></div></div>
